@@ -1,6 +1,7 @@
 
 namespace Api.Features.Courses;
 
+using Api.Common.Authorization;
 using Api.Common.Extensions;
 using Application.Abstractions.Messaging;
 using Application.Features.Courses.CreateCourse;
@@ -22,7 +23,8 @@ public static class CourseEndpoints
 
         group.MapPost("/", Create)
             .WithName("CreateCourse")
-            .WithSummary("Create a new course");
+            .WithSummary("Create a new course")
+            .RequireAuthorization(Policies.CanManageCourses);
 
         group.MapGet("/{id:guid}", GetById)
             .WithName("GetCourseById")
@@ -34,7 +36,11 @@ public static class CourseEndpoints
         CancellationToken cancellationToken)
     {
         var query = new GetAllCoursesQuery();
-        var result = await handler.HandleAsync(query, cancellationToken);
+
+        var result = await handler.HandleAsync(
+            query,
+            cancellationToken);
+
         return result.IsSuccess
             ? TypedResults.Ok(result.Value)
             : result.ToProblemDetails();
@@ -45,9 +51,15 @@ public static class CourseEndpoints
         ICommandHandler<CreateCourseCommand, Result<CreateCourseResponse>> handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(command, cancellationToken);
+        var result = await handler.HandleAsync(
+            command,
+            cancellationToken);
+
         return result.IsSuccess
-            ? TypedResults.CreatedAtRoute(result.Value, "GetCourseById", new { id = result.Value!.Id })
+            ? TypedResults.CreatedAtRoute(
+                result.Value,
+                "GetCourseById",
+                new { id = result.Value!.Id })
             : result.ToProblemDetails();
     }
 
@@ -57,7 +69,11 @@ public static class CourseEndpoints
         CancellationToken cancellationToken)
     {
         var query = new GetCourseByIdQuery(id);
-        var result = await handler.HandleAsync(query, cancellationToken);
+
+        var result = await handler.HandleAsync(
+            query,
+            cancellationToken);
+
         return result.IsSuccess
             ? TypedResults.Ok(result.Value)
             : result.ToProblemDetails();

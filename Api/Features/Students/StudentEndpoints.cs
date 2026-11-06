@@ -1,6 +1,7 @@
 
 namespace Api.Features.Students;
 
+using Api.Common.Authorization;
 using Api.Common.Extensions;
 using Application.Abstractions.Messaging;
 using Application.Features.Students.CreateStudent;
@@ -18,15 +19,18 @@ public static class StudentEndpoints
 
         group.MapGet("/", GetAll)
             .WithName("GetAllStudents")
-            .WithSummary("Get all students");
+            .WithSummary("Get all students")
+            .RequireAuthorization(Policies.CanManageStudents);
 
         group.MapPost("/", Create)
             .WithName("CreateStudent")
-            .WithSummary("Create a new student");
+            .WithSummary("Create a new student")
+            .RequireAuthorization(Policies.CanManageStudents);
 
         group.MapGet("/{id:guid}", GetById)
             .WithName("GetStudentById")
-            .WithSummary("Get student by ID");
+            .WithSummary("Get student by ID")
+            .RequireAuthorization(Policies.CanManageStudents);
     }
 
     private static async Task<IResult> GetAll(
@@ -34,7 +38,11 @@ public static class StudentEndpoints
         CancellationToken cancellationToken)
     {
         var query = new GetAllStudentsQuery();
-        var result = await handler.HandleAsync(query, cancellationToken);
+
+        var result = await handler.HandleAsync(
+            query,
+            cancellationToken);
+
         return result.IsSuccess
             ? TypedResults.Ok(result.Value)
             : result.ToProblemDetails();
@@ -45,9 +53,15 @@ public static class StudentEndpoints
         ICommandHandler<CreateStudentCommand, Result<CreateStudentResponse>> handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(command, cancellationToken);
+        var result = await handler.HandleAsync(
+            command,
+            cancellationToken);
+
         return result.IsSuccess
-            ? TypedResults.CreatedAtRoute(result.Value, "GetStudentById", new { id = result.Value!.Id })
+            ? TypedResults.CreatedAtRoute(
+                result.Value,
+                "GetStudentById",
+                new { id = result.Value!.Id })
             : result.ToProblemDetails();
     }
 
@@ -57,7 +71,11 @@ public static class StudentEndpoints
         CancellationToken cancellationToken)
     {
         var query = new GetStudentByIdQuery(id);
-        var result = await handler.HandleAsync(query, cancellationToken);
+
+        var result = await handler.HandleAsync(
+            query,
+            cancellationToken);
+
         return result.IsSuccess
             ? TypedResults.Ok(result.Value)
             : result.ToProblemDetails();

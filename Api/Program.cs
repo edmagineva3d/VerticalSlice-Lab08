@@ -3,6 +3,7 @@ using Api.Features.Admissions;
 using Api.Features.Auth;
 using Api.Features.Courses;
 using Api.Features.Students;
+using Api.Common.Authorization;
 using Application.Abstractions;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
@@ -117,7 +118,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAppAuthorization();
 
 // Validators
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStudentValidator>();
