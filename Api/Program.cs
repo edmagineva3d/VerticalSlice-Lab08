@@ -1,19 +1,23 @@
-using Api.Features.Students;
-using Api.Features.Courses;
+
 using Api.Features.Admissions;
-using Application.Abstractions.Data;
+using Api.Features.Auth;
+using Api.Features.Courses;
+using Api.Features.Students;
 using Application.Abstractions;
+using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Application.Features.Students.CreateStudent;
-using Application.Features.Students.GetAllStudents;
-using Application.Features.Students.GetStudentById;
+using Application.Features.Admissions.CreateAdmission;
+using Application.Features.Admissions.GetAdmissionById;
+using Application.Features.Auth.Register;
 using Application.Features.Courses.CreateCourse;
 using Application.Features.Courses.GetAllCourses;
 using Application.Features.Courses.GetCourseById;
-using Application.Features.Admissions.CreateAdmission;
-using Application.Features.Admissions.GetAdmissionById;
+using Application.Features.Students.CreateStudent;
+using Application.Features.Students.GetAllStudents;
+using Application.Features.Students.GetStudentById;
 using Domain.Common;
 using FluentValidation;
+using Infrastructure.Authentication;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -24,7 +28,20 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<IAppDbContext, AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("Database")));
 
+// Password Hasher
 builder.Services.AddScoped<IPasswordHasher, Infrastructure.Authentication.PasswordHasher>();
+
+// JWT Options and Token Service
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.SigningKey),
+        "Jwt:SigningKey is required. Set it with: dotnet user-secrets set \"Jwt:SigningKey\" \"<value>\"")
+    .Validate(o => System.Text.Encoding.UTF8.GetByteCount(o.SigningKey ?? "") >= 32,
+        "Jwt:SigningKey must be at least 256 bits (32 characters).")
+    .ValidateOnStart();
+
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 // Validators
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStudentValidator>();
@@ -38,6 +55,7 @@ builder.Services.AddScoped<IQueryHandler<GetAllCoursesQuery, Result<GetAllCourse
 builder.Services.AddScoped<IQueryHandler<GetCourseByIdQuery, Result<GetCourseByIdResponse>>, GetCourseByIdQueryHandler>();
 builder.Services.AddScoped<ICommandHandler<CreateAdmissionCommand, Result<CreateAdmissionResponse>>, CreateAdmissionCommandHandler>();
 builder.Services.AddScoped<IQueryHandler<GetAdmissionByIdQuery, Result<GetAdmissionByIdResponse>>, GetAdmissionByIdQueryHandler>();
+builder.Services.AddScoped<ICommandHandler<RegisterCommand, Result<RegisterResponse>>, RegisterCommandHandler>();
 
 // API
 builder.Services.AddEndpointsApiExplorer();
@@ -70,5 +88,6 @@ app.MapGet("/", () => "Welcome to the Vertical Slice API! Go to /scalar/v1 for A
 app.MapStudentEndpoints();
 app.MapCourseEndpoints();
 app.MapAdmissionEndpoints();
+app.MapAuthEndpoints();
 
 app.Run();
