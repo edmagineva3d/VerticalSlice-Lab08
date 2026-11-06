@@ -3,6 +3,7 @@ using Api.Features.Admissions;
 using Api.Features.Auth;
 using Api.Features.Courses;
 using Api.Features.Students;
+using Microsoft.AspNetCore.Authorization;
 using Api.Common.Authorization;
 using Application.Abstractions;
 using Application.Abstractions.Data;
@@ -119,6 +120,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAppAuthorization();
+
+builder.Services.AddSingleton<IAuthorizationHandler, AdmissionOwnerHandler>();
 
 // Validators
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStudentValidator>();
