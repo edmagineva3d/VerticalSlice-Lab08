@@ -26,6 +26,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,6 +50,8 @@ builder.Services.AddOptions<JwtOptions>()
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddSingleton(TimeProvider.System);
 
+builder.Services.AddHostedService<Infrastructure.BackgroundJobs.RevokedTokenCleanupService>();
+
 // JWT Authentication
 var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
 
@@ -65,6 +69,51 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(jwtSection["SigningKey"]!)),
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+
+        // Check if the token has been revoked
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<IAppDbContext>();
+
+                var jti = context.Principal?
+                    .FindFirstValue(JwtRegisteredClaimNames.Jti);
+
+                var sub = context.Principal?
+                    .FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+                var iatRaw = context.Principal?
+                    .FindFirstValue(JwtRegisteredClaimNames.Iat);
+
+                if (jti is not null &&
+                    await dbContext.RevokedTokens.AnyAsync(r => r.Jti == jti))
+                {
+                    context.Fail("Token has been revoked.");
+                    return;
+                }
+
+                if (sub is not null &&
+                    Guid.TryParse(sub, out var userId) &&
+                    iatRaw is not null &&
+                    long.TryParse(iatRaw, out var iatUnix))
+                {
+                    var issuedAtUtc = DateTimeOffset
+                        .FromUnixTimeSeconds(iatUnix)
+                        .UtcDateTime;
+
+                    var user = await dbContext.Users.FindAsync([userId]);
+
+                    if (user?.TokensValidFromUtc is { } validFrom &&
+                        issuedAtUtc < validFrom)
+                    {
+                        context.Fail(
+                            "Token was issued before the user's last sign-out-everywhere.");
+                    }
+                }
+            }
         };
     });
 
@@ -121,6 +170,33 @@ var app = builder.Build();
 await app.Services.MigrateAndSeedAsync();
 
 // Configure the HTTP request pipeline
+
+app.UseStatusCodePages(async context =>
+{
+    var response = context.HttpContext.Response;
+
+    if (response.StatusCode is StatusCodes.Status401Unauthorized
+                            or StatusCodes.Status403Forbidden)
+    {
+        response.ContentType = "application/problem+json";
+
+        await response.WriteAsJsonAsync(
+            new Microsoft.AspNetCore.Mvc.ProblemDetails
+            {
+                Status = response.StatusCode,
+                Title = response.StatusCode == StatusCodes.Status401Unauthorized
+                    ? "Unauthorized"
+                    : "Forbidden",
+                Detail = response.StatusCode == StatusCodes.Status401Unauthorized
+                    ? "Authentication is required to access this resource."
+                    : "You do not have permission to perform this action."
+            });
+    }
+});
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -140,4 +216,3 @@ app.MapAdmissionEndpoints();
 app.MapAuthEndpoints();
 
 app.Run();
-    u8jy7gt
